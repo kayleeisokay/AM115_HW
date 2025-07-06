@@ -2,8 +2,6 @@
 
 ### Continuous Deterministic
 1. SIR Model with Vaccination, Mutation
-- Find R_inf, S_inf and I_inf
-- Phase Portrait
 2. SIR Model with Vaccination, Mutation, and Quarantine
 
 ### Individual-Agent
