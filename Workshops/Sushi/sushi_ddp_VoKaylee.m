@@ -2,24 +2,42 @@
 % Discrete Dynamic Programming
 fprintf('\nSUSHI_DP SUSHI RESTAURANT MODEL\n')
 close all
-
+rng(116);
 %include the path to the dynamical programming library
 cepath='/Users/kayleeyvo/Downloads/CompEcon-master4students/';
 path([cepath 'CEtools;' cepath 'CEdemos'],path);
 
 % ENTER MODEL PARAMETERS
-price   = 40;                             % sushi price ($/lb) when sold
+
+% sushi price ($/lb) when sold
+% price = 20; % default
+price   = 60; % high profit margin                             
 cost    = 10;                             % sushi cost ($/lb) when bought
-holdcost= 20;                             % opportunity cost, cost of shelf space
+holdcost= 2;                             % opportunity cost, cost of shelf space
+
+
+% Big Chain PARAMETERS
+% Lower each parameter because of economies of scale
+% price = 15;  
+% cost = 5;
+% holdcost = 1;
+
 %Note: if there is no holding cost, then as long as you can adjust the next
 %day, there won't be waste. In that case, there are multiple optimal solutions.
 
 T=20;                                     % how many days to run the simulation for
 %Define the probability mass function of the demand (a discretiziation of
 %the true probability distribution function).
-demand=100+10*(-2:1:2);                    %The set of possible demand values
+demand=50+10*(-2:1:2);                    %The set of possible demand values
+
+%big store demand
+% demand=200+10*(-3:1:3);
+
 prob=ones(size(demand));                  %Probability mass function, assumed uniform here
-%prob=[1 2 5 2 1];                          %A different PMF
+
+%A different PMF for big store demand
+% prob=[1 2 3 10 3 2 1];             
+
 prob=prob/sum(prob);                      %total probability is 1
 % Construct the state space. Both states are needed to evolve the system
 % and compute the profit
@@ -35,6 +53,14 @@ m=numel(purchase);                        % number of actions
 
 % Construct reward function, which is a nxm matrix in this case
 f=price*S(:,2)*ones(1,m)-cost*ones(n,1)*purchase-holdcost*S(:,1)*ones(1,m);
+
+%gamma < 0 - risk seeking
+%gamma = 0 - risk neutral
+%gamma > 0 - risk averse
+gamma = 1; 
+utility = @(profit) (profit.^(1 - gamma) - 1) / (1 - gamma)
+f = utility(max(f, 1e-6));
+
 % Construct state transition probability matrix
 g = [];
 for j=1:m %action
@@ -96,50 +122,57 @@ xlabel('Fish sold the day before (lb)');
 ylabel('Fish carried over from the day before (lb)');
 title('Optimal purchase amount (lb)');
 
-
-% Define initial state (e.g., no carryover and no sales initially)
-s_init = [0, 0]; % [carryover, sold]
+% ---- Trajectories ----
+% Define initial state: carryover = 0, sold = 0
+s_init = [0, 0]; 
 
 % Find the index of the initial state
 [~, idx] = ismember(s_init, S, 'rows');
 
 % Initialize state and action trajectories
-state_traj = zeros(T, 2); % Each row is [carryover, sold]
-action_traj = zeros(T, 1); % Optimal purchase amounts
+% Each row is vector: [carryover, sold]
+% include state at t=1 and final at t=T+1
+state_traj = zeros(T+1, 2); 
+% Actions taken at t=1 to t=T
+action_traj = zeros(T, 1);  
 
-state_traj(1, :) = s_init;
-action_traj(1) = purchase(u(idx, 1));
+state_traj(1,:) = s_init;   % Initial state at t=1
 
-% Simulate the trajectory
-for t = 2:T
+for t = 1:T
     % Get current state index
-    [~, idx] = ismember(state_traj(t-1, :), S, 'rows');
-
-    % Get optimal action for current state and time
-    action_traj(t) = purchase(u(idx, t));
-
-    % Simulate demand (randomly sampled from the demand distribution)
+    [~, idx] = ismember(state_traj(t,:), S, 'rows');
+    
+    % Get optimal action given state and time
+    action_traj(t) = purchase(u(idx,t));
+    
+    % Sample demand
     demand_sample = randsample(demand, 1, true, prob);
-
-    % Update state based on demand and action
-    if demand_sample < state_traj(t-1, 1)
+    
+    % Update state: very similar to the code
+    % for constructing transition matrix
+    if demand_sample < state_traj(t,1)
         carryover = action_traj(t);
         sold = demand_sample;
-    elseif demand_sample < state_traj(t-1, 1) + action_traj(t)
-        carryover = state_traj(t-1, 1) + action_traj(t) - demand_sample;
+    elseif demand_sample < state_traj(t,1) + action_traj(t)
+        carryover = state_traj(t,1) + action_traj(t) - demand_sample;
         sold = demand_sample;
     else
         carryover = 0;
-        sold = state_traj(t-1, 1) + action_traj(t);
+        sold = state_traj(t,1) + action_traj(t);
     end
-
-    state_traj(t, :) = [carryover, sold];
+    
+    state_traj(t+1,:) = [carryover, sold];
 end
 
-% Plot the state trajectory
+% Trim the last state, only want T steps
+state_traj = state_traj(1:T,:);
+
+
 figure;
 subplot(2, 1, 1);
 hold on; 
+
+% Plot the state trajectory
 plot(1:T, state_traj(:, 1));
 plot(1:T, state_traj(:, 2));
 xlabel('Time (days)');
@@ -147,6 +180,7 @@ ylabel('Amount (lb)');
 legend('Carryover', 'Sold');
 title('State Trajectory');
 
+% Plot the optimal purchase trajectory
 subplot(2, 1, 2);
 plot(1:T, action_traj);
 xlabel('Time (days)');
